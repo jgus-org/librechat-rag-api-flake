@@ -1,0 +1,132 @@
+# Update workflow for a producer whose upstream has no named releases, so there is
+# nothing to branch on: the published pin is the revision the branch currently names,
+# and the history of previous versions is this branch's own commit log. A producer that
+# tracks named releases gets templates/workflows/update-branches.yml instead of this one.
+#
+# Installed and refreshed by `nix run github:jgus-org/flake-lib/v1#update-workflows`: the
+# tool is taken from flake-lib's own flake URL rather than from this repository, because
+# there is nothing producer-specific in it to re-declare. A repository that does not have
+# this file yet installs it with
+# `nix run github:jgus-org/flake-lib/v1#update-workflows -- adopt update-version.yml`.
+# Edit it in jgus-org/flake-lib's
+# templates/workflows, not here. Binary caching uses the fleet Attic cache whenever
+# the ATTIC_TOKEN secret resolves -- an organization secret covers every repository at
+# once -- and a repository, or a fork pull request, with no token runs on the public
+# cache alone. The workflow below updates itself:
+# a run reads this file
+# when it starts, so the first job refreshes it and commits that revision, and the job
+# after it checks out that commit.
+#
+# Everything the run changed is committed together. Scratch output the updater leaves
+# behind must be in .gitignore, since staging is unrestricted.
+
+name: Update version
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  workflows:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.update.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/install-nix-action@v31
+
+      - uses: jgus-org/flake-lib/.github/actions/fleet-nix-cache@v1
+        with:
+          token: ${{ secrets.ATTIC_TOKEN }}
+
+      - name: Update workflows from flake-lib templates
+        id: update
+        env:
+          GIT_PUSH_TOKEN: ${{ secrets.ORG_UPDATE_TOKEN }}
+        run: nix run github:jgus-org/flake-lib/v1#update-workflows
+
+  # A producer whose flake takes inputs from other producers here must not pin them before
+  # their own update has published. The edges are this repository's flake inputs, so nothing
+  # below is producer-specific, and a leaf producer's run reports nothing to wait for. A
+  # dependency that cannot be observed, that ended badly, or that never finishes is reported
+  # and skipped: ordering is worth waiting for, not worth stalling the fleet on.
+  deps:
+    needs: workflows
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.workflows.outputs.sha || github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/install-nix-action@v31
+
+      - uses: jgus-org/flake-lib/.github/actions/fleet-nix-cache@v1
+        with:
+          token: ${{ secrets.ATTIC_TOKEN }}
+
+      - name: Wait for dependency updates
+        env:
+          # Reading another repository's runs and starting a dependency's update both need a
+          # token. This organization secret covers every repository, so no producer declares
+          # anything, and with no such secret the gate observes nothing and proceeds.
+          GITHUB_TOKEN: ${{ secrets.ORG_UPDATE_TOKEN }}
+        run: nix run github:jgus-org/flake-lib/v1#wait-for-deps
+
+  update:
+    needs: [workflows, deps]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.workflows.outputs.sha || github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/install-nix-action@v31
+
+      - uses: jgus-org/flake-lib/.github/actions/fleet-nix-cache@v1
+        with:
+          token: ${{ secrets.ATTIC_TOKEN }}
+
+      - name: Bump nixpkgs
+        run: nix flake update
+
+      - name: Bump the tracked revision
+        env:
+          # gh CLI reads GH_TOKEN, not GITHUB_TOKEN; required for github-source flakes.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix run .#update-version
+
+      # The updater exits early when the upstream commit has not moved, so this runs
+      # unconditionally: nixpkgs can have moved underneath a pin that did not, and a
+      # run that only pins files without building them says nothing about the result.
+      # A producer's tracked package is exposed as packages.default, which is what builds.
+      - name: Build the package
+        run: nix build --no-link -L ".#default"
+
+      - name: Commit and push whatever the run changed
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "auto: bump the tracked revision"
+          # The checkout above is detached at the commit the first job pushed, so the
+          # branch to update comes from the ref the run started on, not from HEAD.
+          git push --quiet origin "HEAD:${GITHUB_REF_NAME}"
