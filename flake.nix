@@ -9,20 +9,42 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, flake-lib }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      flake-lib,
+      treefmt-nix,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pin = import ./pin.nix;
         inherit (pin) version sourceRev sourceHash;
         # rag_api has no release cadence; track main by commit.
-        source = { type = "github"; owner = "danny-avila"; repo = "rag_api"; track = "commit"; };
+        source = {
+          type = "github";
+          owner = "danny-avila";
+          repo = "rag_api";
+          track = "commit";
+        };
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
         };
         inherit (pkgs) lib;
+
+        treefmtEval = treefmt-nix.lib.evalModule pkgs {
+          projectRootFile = "flake.nix";
+          programs.nixfmt.enable = true;
+        };
 
         src = pkgs.fetchFromGitHub {
           owner = "danny-avila";
@@ -32,49 +54,54 @@
         };
 
         # requirements.lite.txt, mapped to nixpkgs. opencv is pulled transitively by rapidocr-onnxruntime; adding it explicitly would collide on the cv2 module.
-        pythonEnv = pkgs.python3.withPackages (ps: with ps; [
-          langchain
-          langchain-community
-          langchain-core
-          langchain-openai
-          langchain-google-genai
-          langchain-aws
-          langchain-ollama
-          langchain-mongodb
-          sqlalchemy
-          python-dotenv
-          fastapi
-          psycopg2
-          pgvector
-          uvicorn
-          pypdf
-          unstructured
-          markdown
-          networkx
-          pandas
-          openpyxl
-          docx2txt
-          pypandoc
-          pyjwt
-          asyncpg
-          python-multipart
-          aiofiles
-          rapidocr-onnxruntime
-          pymongo
-          cryptography
-          python-magic
-          python-pptx
-          xlrd
-          boto3
-          chardet
-          tenacity
-          msoffcrypto-tool
-        ]);
+        pythonEnv = pkgs.python3.withPackages (
+          ps: with ps; [
+            langchain
+            langchain-community
+            langchain-core
+            langchain-openai
+            langchain-google-genai
+            langchain-aws
+            langchain-ollama
+            langchain-mongodb
+            sqlalchemy
+            python-dotenv
+            fastapi
+            psycopg2
+            pgvector
+            uvicorn
+            pypdf
+            unstructured
+            markdown
+            networkx
+            pandas
+            openpyxl
+            docx2txt
+            pypandoc
+            pyjwt
+            asyncpg
+            python-multipart
+            aiofiles
+            rapidocr-onnxruntime
+            pymongo
+            cryptography
+            python-magic
+            python-pptx
+            xlrd
+            boto3
+            chardet
+            tenacity
+            msoffcrypto-tool
+          ]
+        );
 
         # unstructured/nltk resolve corpora under NLTK_DATA; ship what nixpkgs packages.
         nltkData = pkgs.symlinkJoin {
           name = "librechat-rag-api-nltk-data";
-          paths = with pkgs.nltk-data; [ punkt stopwords ];
+          paths = with pkgs.nltk-data; [
+            punkt
+            stopwords
+          ];
         };
 
         # asyncio sets IPV6_V6ONLY=1 when binding `::`, making it IPv6-only; drop that setsockopt so a `::` bind is dual-stack and reachable over IPv4. sitecustomize is auto-imported before main.py / uvicorn.
@@ -124,5 +151,8 @@
           inherit librechat-rag-api update-version;
           default = librechat-rag-api;
         };
-      });
+        formatter = treefmtEval.config.build.wrapper;
+        checks.formatting = treefmtEval.config.build.check self;
+      }
+    );
 }
