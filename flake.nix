@@ -143,7 +143,6 @@
 
         update-version = flake-lib.lib.mkUpdateVersion {
           inherit pkgs source;
-          buildAttr = "librechat-rag-api";
         };
       in
       {
