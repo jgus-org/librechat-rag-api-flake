@@ -3,11 +3,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    flake-utils.url = "github:numtide/flake-utils";
     flake-lib = {
       url = "github:jgus-org/flake-lib/v1";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
     };
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -19,16 +17,15 @@
     {
       self,
       nixpkgs,
-      flake-utils,
       flake-lib,
       treefmt-nix,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    flake-lib.lib.eachDefaultSystem (
       system:
       let
         pin = import ./pin.nix;
         inherit (pin) version sourceRev sourceHash;
-        # rag_api has no release cadence; track main by commit.
+        # Upstream publishes named releases; this producer tracks main by commit instead.
         source = {
           type = "github";
           owner = "danny-avila";
