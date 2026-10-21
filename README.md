@@ -1,13 +1,13 @@
 # librechat-rag-api-flake
 
-A Nix flake that provides [rag_api](https://github.com/danny-avila/rag_api), the document-embedding and retrieval sidecar for [LibreChat](https://github.com/danny-avila/LibreChat). Upstream publishes no releases, so the pin tracks a commit of its `main` branch.
+A Nix flake that provides [rag_api](https://github.com/LibreChat-AI/rag-api) (moved from `danny-avila/rag_api`), the document-embedding and retrieval sidecar for [LibreChat](https://github.com/danny-avila/LibreChat).
 
 ## Outputs
 
 - `packages.<system>.librechat-rag-api` — the service, exposing `librechat-rag-api` on `PATH`. `packages.<system>.default` is the same derivation.
 - `packages.<system>.update-version` — maintenance output that re-pins the tracked commit and its source hash; not needed to consume the flake.
 
-There are no overlays, devShells, or apps. The package is built and run on Linux; on Darwin, evaluation fails as an unsupported platform.
+There are no overlays, devShells, or apps. The package is built and run on Linux; the Darwin output is published but never built or tested here.
 
 ## Consuming it
 
@@ -15,7 +15,6 @@ There are no overlays, devShells, or apps. The package is built and run on Linux
 inputs.librechat-rag-api = {
   url = "github:jgus-org/librechat-rag-api-flake";
   inputs.nixpkgs.follows = "nixpkgs";
-  inputs.flake-utils.follows = "flake-utils";
 };
 ```
 
@@ -31,7 +30,7 @@ The launcher runs upstream's `main.py` under uvicorn, bound to `RAG_HOST`/`RAG_P
 
 ## Versions
 
-`version` is a datestamp (`0-unstable-2026-09-24` style) because upstream has no releases; `pin.nix` carries the commit it resolves to.
+`version` is a datestamp (`0-unstable-2026-09-24` style), not an upstream release number: this producer follows upstream's `main` branch rather than its tagged releases, and a datestamp does not identify code on its own. `pin.nix` names the commit it resolves to, and your own lock on a producer commit is what pins an exact upstream revision.
 
 ## Licence
 
