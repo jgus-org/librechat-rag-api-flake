@@ -2,35 +2,27 @@
   description = "LibreChat RAG API (danny-avila/rag_api): document-embedding/retrieval service.";
 
   inputs = {
+    flake-lib.url = "github:jgus-org/flake-lib/v1";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    flake-lib = {
-      url = "github:jgus-org/flake-lib/v1";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
     {
       self,
-      nixpkgs,
       flake-lib,
-      treefmt-nix,
+      nixpkgs,
     }:
     flake-lib.lib.eachDefaultSystem (
       system:
       let
         pin = import ./pin.nix;
-        inherit (pin) version sourceRev sourceHash;
+        inherit (pin) sourceHash sourceRev version;
         # Upstream publishes named releases; this producer tracks main by commit instead.
         source = {
-          type = "github";
           owner = "danny-avila";
           repo = "rag_api";
           track = "commit";
+          type = "github";
         };
         pkgs = import nixpkgs {
           inherit system;
@@ -38,16 +30,15 @@
         };
         inherit (pkgs) lib;
 
-        treefmtEval = treefmt-nix.lib.evalModule pkgs {
-          projectRootFile = "flake.nix";
-          programs.nixfmt.enable = true;
+        orgFormatting = flake-lib.lib.mkFormatting {
+          inherit self system;
         };
 
         src = pkgs.fetchFromGitHub {
+          hash = sourceHash;
           owner = "danny-avila";
           repo = "rag_api";
           rev = sourceRev;
-          hash = sourceHash;
         };
 
         # requirements.lite.txt, mapped to nixpkgs. opencv is pulled transitively by rapidocr-onnxruntime; adding it explicitly would collide on the cv2 module.
@@ -113,13 +104,10 @@
         '';
 
         librechat-rag-api = pkgs.stdenv.mkDerivation {
-          pname = "librechat-rag-api";
-          inherit version src;
-
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          dontConfigure = true;
+          inherit src version;
           dontBuild = true;
-
+          dontConfigure = true;
+          dontStrip = true;
           installPhase = ''
             runHook preInstall
             mkdir -p "$out/share/librechat-rag-api" "$out/bin"
@@ -133,9 +121,9 @@
               --set-default SCARF_NO_ANALYTICS "true"
             runHook postInstall
           '';
-
-          dontStrip = true;
           meta.mainProgram = "librechat-rag-api";
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          pname = "librechat-rag-api";
         };
 
         update-version = flake-lib.lib.mkUpdateVersion {
@@ -143,12 +131,12 @@
         };
       in
       {
+        checks.formatting = orgFormatting.check;
+        formatter = orgFormatting.formatter;
         packages = {
           inherit librechat-rag-api update-version;
           default = librechat-rag-api;
         };
-        formatter = treefmtEval.config.build.wrapper;
-        checks.formatting = treefmtEval.config.build.check self;
       }
     );
 }
