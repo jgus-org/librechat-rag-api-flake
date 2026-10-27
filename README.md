@@ -32,8 +32,4 @@ The launcher runs upstream's `main.py` under uvicorn, bound to `RAG_HOST`/`RAG_P
 
 `version` is a datestamp (`0-unstable-2026-09-24` style), not an upstream release number: this producer follows upstream's `main` branch rather than its tagged releases, and a datestamp does not identify code on its own. `pin.nix` names the commit it resolves to, and your own lock on a producer commit is what pins an exact upstream revision.
 
-## Unfree dependencies
-
-This flake evaluates nixpkgs with `allowUnfree` enabled, so an unfree dependency entering the Python closure is built rather than refused.
-
 See [LICENSE.md](LICENSE.md) for licensing and copyright, and [NOTICE.md](NOTICE.md) for the terms of upstream and distributed artifacts.
