@@ -2,7 +2,10 @@
   description = "LibreChat RAG API (danny-avila/rag_api): document-embedding/retrieval service.";
 
   inputs = {
-    flake-lib.url = "github:jgus-org/flake-lib/v1";
+    flake-lib = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:jgus-org/flake-lib/v1";
+    };
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
@@ -19,51 +22,22 @@
       payload.packages =
         {
           pkgs,
+          sourcePath,
           src,
           version,
           ...
         }:
         let
-          # requirements.lite.txt, mapped to nixpkgs. opencv is pulled transitively by rapidocr-onnxruntime; adding it explicitly would collide on the cv2 module.
+          requirements = flake-lib.lib.readPythonRequirements (sourcePath + "/requirements.lite.txt");
+
+          # The names arrive read from upstream's requirements.lite.txt. Two depart from what the file asks: nixpkgs publishes psycopg2 without the -binary wheel spelling, and opencv-python-headless is pulled transitively by rapidocr-onnxruntime, where naming it too would collide on the cv2 module.
           pythonEnv = pkgs.python3.withPackages (
-            ps: with ps; [
-              langchain
-              langchain-community
-              langchain-core
-              langchain-openai
-              langchain-google-genai
-              langchain-aws
-              langchain-ollama
-              langchain-mongodb
-              sqlalchemy
-              python-dotenv
-              fastapi
-              psycopg2
-              pgvector
-              uvicorn
-              pypdf
-              unstructured
-              markdown
-              networkx
-              pandas
-              openpyxl
-              docx2txt
-              pypandoc
-              pyjwt
-              asyncpg
-              python-multipart
-              aiofiles
-              rapidocr-onnxruntime
-              pymongo
-              cryptography
-              python-magic
-              python-pptx
-              xlrd
-              boto3
-              chardet
-              tenacity
-              msoffcrypto-tool
-            ]
+            ps:
+            map (n: ps.${n}) (
+              map (n: if n == "psycopg2-binary" then "psycopg2" else n) (
+                builtins.filter (n: n != "opencv-python-headless") requirements
+              )
+            )
           );
 
           # unstructured/nltk resolve corpora under NLTK_DATA; ship what nixpkgs packages.
