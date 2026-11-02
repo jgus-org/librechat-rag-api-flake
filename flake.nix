@@ -28,13 +28,13 @@
           ...
         }:
         let
-          requirements =
-            [ "psycopg2" ]
-            ++ pkgs.lib.lists.subtractLists [
-              "opencv-python-headless"
-              "psycopg2-binary"
-            ]
-            (flake-lib.lib.readPythonRequirements (sourcePath + "/requirements.lite.txt"));
+          requirements = [
+            "psycopg2"
+          ]
+          ++ pkgs.lib.lists.subtractLists [
+            "opencv-python-headless"
+            "psycopg2-binary"
+          ] (flake-lib.lib.readPythonRequirements (sourcePath + "/requirements.lite.txt"));
 
           dependencies = ps: map (n: ps.${n}) requirements;
 
