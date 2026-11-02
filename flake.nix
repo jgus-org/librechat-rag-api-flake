@@ -54,7 +54,6 @@
                   )
                 )
               );
-            dualStack = true;
             envDefaults = {
               # unstructured/nltk resolve corpora under NLTK_DATA; ship what nixpkgs packages.
               NLTK_DATA = "${pkgs.symlinkJoin {
@@ -67,6 +66,7 @@
               SCARF_NO_ANALYTICS = "true";
             };
             name = "librechat-rag-api";
+            pythonPath = [ (flake-lib.lib.pythonDualStackIPv6.site pkgs) ];
             runtimeInputs = [ pkgs.pandoc ];
             script = "${tree}/share/librechat-rag-api/main.py";
             workDir = "${tree}/share/librechat-rag-api";
