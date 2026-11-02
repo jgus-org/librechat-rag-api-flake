@@ -28,6 +28,16 @@
           ...
         }:
         let
+          requirements =
+            [ "psycopg2" ]
+            ++ pkgs.lib.lists.subtractLists [
+              "opencv-python-headless"
+              "psycopg2-binary"
+            ]
+            (flake-lib.lib.readPythonRequirements (sourcePath + "/requirements.lite.txt"));
+
+          dependencies = ps: map (n: ps.${n}) requirements;
+
           tree = pkgs.stdenv.mkDerivation {
             inherit src version;
             dontBuild = true;
@@ -44,16 +54,7 @@
         in
         {
           librechat-rag-api = flake-lib.lib.mkPythonApplication {
-            inherit pkgs;
-            dependencies =
-              ps:
-              map (n: ps.${n}) (
-                map (n: if n == "psycopg2-binary" then "psycopg2" else n) (
-                  builtins.filter (n: n != "opencv-python-headless") (
-                    flake-lib.lib.readPythonRequirements (sourcePath + "/requirements.lite.txt")
-                  )
-                )
-              );
+            inherit dependencies pkgs;
             envDefaults = {
               # unstructured/nltk resolve corpora under NLTK_DATA; ship what nixpkgs packages.
               NLTK_DATA = "${pkgs.symlinkJoin {
