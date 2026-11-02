@@ -30,15 +30,13 @@
         let
           requirements = flake-lib.lib.readPythonRequirements (sourcePath + "/requirements.lite.txt");
 
-          # The names arrive read from upstream's requirements.lite.txt. Two depart from what the file asks: nixpkgs publishes psycopg2 without the -binary wheel spelling, and opencv-python-headless is pulled transitively by rapidocr-onnxruntime, where naming it too would collide on the cv2 module.
-          pythonEnv = pkgs.python3.withPackages (
+          dependencies =
             ps:
             map (n: ps.${n}) (
               map (n: if n == "psycopg2-binary" then "psycopg2" else n) (
                 builtins.filter (n: n != "opencv-python-headless") requirements
               )
-            )
-          );
+            );
 
           # unstructured/nltk resolve corpora under NLTK_DATA; ship what nixpkgs packages.
           nltkData = pkgs.symlinkJoin {
@@ -59,29 +57,33 @@
                 return _orig(self, level, optname, value, *a, **kw)
             socket.socket.setsockopt = setsockopt
           '';
-        in
-        {
-          librechat-rag-api = pkgs.stdenv.mkDerivation {
+
+          tree = pkgs.stdenv.mkDerivation {
             inherit src version;
             dontBuild = true;
             dontConfigure = true;
             dontStrip = true;
             installPhase = ''
               runHook preInstall
-              mkdir -p "$out/share/librechat-rag-api" "$out/bin"
+              mkdir -p "$out/share/librechat-rag-api"
               cp -r . "$out/share/librechat-rag-api"
-              makeWrapper ${pythonEnv}/bin/python "$out/bin/librechat-rag-api" \
-                --add-flags "$out/share/librechat-rag-api/main.py" \
-                --chdir "$out/share/librechat-rag-api" \
-                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.pandoc ]} \
-                --prefix PYTHONPATH : ${dualStackHook} \
-                --set-default NLTK_DATA "${nltkData}" \
-                --set-default SCARF_NO_ANALYTICS "true"
               runHook postInstall
             '';
-            meta.mainProgram = "librechat-rag-api";
-            nativeBuildInputs = [ pkgs.makeWrapper ];
             pname = "librechat-rag-api";
+          };
+        in
+        {
+          librechat-rag-api = flake-lib.lib.mkPythonApplication {
+            inherit dependencies pkgs;
+            envDefaults = {
+              NLTK_DATA = "${nltkData}";
+              SCARF_NO_ANALYTICS = "true";
+            };
+            name = "librechat-rag-api";
+            pythonPath = [ dualStackHook ];
+            runtimeInputs = [ pkgs.pandoc ];
+            script = "${tree}/share/librechat-rag-api/main.py";
+            workDir = "${tree}/share/librechat-rag-api";
           };
         };
 
